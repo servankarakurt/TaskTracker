@@ -2,6 +2,10 @@
 using Microsoft.Extensions.Logging;
 using GorevTakipUygulamasi.Models;
 using GorevTakipUygulamasi.Services.LogicApp;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace GorevTakipUygulamasi.Services
 {
@@ -100,10 +104,10 @@ namespace GorevTakipUygulamasi.Services
                     var reminder = entity.ToReminderItem();
 
                     // Tarih filtrelemesi
-                    if (startDate.HasValue && reminder.Date < DateOnly.FromDateTime(startDate.Value))
+                    if (startDate.HasValue && reminder.Date < DateOnly.FromDateTime(startDate.Value.Date))
                         continue;
 
-                    if (endDate.HasValue && reminder.Date > DateOnly.FromDateTime(endDate.Value))
+                    if (endDate.HasValue && reminder.Date > DateOnly.FromDateTime(endDate.Value.Date))
                         continue;
 
                     reminders.Add(reminder);
@@ -279,10 +283,10 @@ namespace GorevTakipUygulamasi.Services
                     var reminder = entity.ToReminderItem();
 
                     // Tarih filtreleme
-                    if (filter.StartDate.HasValue && reminder.Date < DateOnly.FromDateTime(filter.StartDate.Value))
+                    if (filter.StartDate.HasValue && reminder.Date < DateOnly.FromDateTime(filter.StartDate.Value.Date))
                         continue;
 
-                    if (filter.EndDate.HasValue && reminder.Date > DateOnly.FromDateTime(filter.EndDate.Value))
+                    if (filter.EndDate.HasValue && reminder.Date > DateOnly.FromDateTime(filter.EndDate.Value.Date))
                         continue;
 
                     // Arama terimi filtreleme

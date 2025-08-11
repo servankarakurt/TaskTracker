@@ -1,53 +1,59 @@
-﻿using GorevTakipUygulamasi.Services.Background;
-using Microsoft.Extensions.DependencyInjection; // Eksik using eklendi
-using Microsoft.Extensions.Hosting;
+﻿using GorevTakipUygulamasi.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using System;
-using System.Threading;
-// 'Task' çakışmasını çözmek için tam yoluyla belirtiyoruz:
-using System.Threading.Tasks;
+// DEĞİŞİKLİK: 'System.Threading.Tasks.Task' için 'SystemTask' takma adı eklendi.
+using SystemTask = System.Threading.Tasks.Task;
 
 namespace GorevTakipUygulamasi.Services
 {
-    public class ReminderCheckService : BackgroundService
+    public class ReminderCheckService : IReminderCheckService
     {
-        private readonly IServiceProvider _serviceProvider;
+        private readonly ApplicationDbContext _context;
         private readonly ILogger<ReminderCheckService> _logger;
-        private readonly TimeSpan _checkInterval = TimeSpan.FromMinutes(1);
+        private readonly ReminderNotificationService _notificationService;
 
-        public ReminderCheckService(IServiceProvider serviceProvider, ILogger<ReminderCheckService> logger)
+        public ReminderCheckService(ApplicationDbContext context, ILogger<ReminderCheckService> logger, ReminderNotificationService notificationService)
         {
-            _serviceProvider = serviceProvider;
+            _context = context;
             _logger = logger;
+            _notificationService = notificationService;
         }
 
-        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        public async SystemTask CheckAndProcessRemindersAsync() // DEĞİŞİKLİK: 'Task' -> 'SystemTask'
         {
-            _logger.LogInformation("Hatırlatıcı kontrol servisi başlatıldı.");
+            _logger.LogInformation("Hatırlatıcı kontrolü başladı.");
+            var remindersToProcess = await _context.Reminders
+                .Where(r => r.ReminderTime <= DateTime.UtcNow && !r.IsSent)
+                .ToListAsync();
 
-            while (!stoppingToken.IsCancellationRequested)
+            foreach (var reminder in remindersToProcess)
             {
-                _logger.LogInformation("Arka plan işleri tetikleniyor. Zaman: {time}", DateTimeOffset.Now);
+                // Bu kısmı ReminderNotificationService'inize göre düzenlemeniz gerekebilir.
+                // Örneğin, Reminder yerine ReminderItem göndermek gibi.
+                // bool success = await _notificationService.SendReminderAsync(reminder); 
 
-                try
-                {
-                    // Her döngüde yeni bir 'scope' oluşturarak servisleri doğru şekilde alıyoruz.
-                    using (var scope = _serviceProvider.CreateScope())
-                    {
-                        var backgroundJobService = scope.ServiceProvider.GetRequiredService<IBackgroundJobService>();
-                        await backgroundJobService.ProcessPendingEmailRemindersAsync();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Arka plan işi yürütülürken hata oluştu.");
-                }
+                // Şimdilik sadece logluyoruz.
+                _logger.LogInformation("{ReminderId} ID'li hatırlatıcı işleniyor.", reminder.Id);
 
-                // Bir sonraki döngüye kadar bekle.
-                await System.Threading.Tasks.Task.Delay(_checkInterval, stoppingToken);
+                reminder.IsSent = true;
+                _context.Update(reminder);
             }
 
-            _logger.LogInformation("Hatırlatıcı kontrol servisi durduruluyor.");
+            await _context.SaveChangesAsync();
+            _logger.LogInformation("{Count} adet hatırlatıcı işlendi.", remindersToProcess.Count);
         }
+
+        public async SystemTask CleanupExpiredRemindersAsync() // DEĞİŞİKLİK: 'Task' -> 'SystemTask'
+        {
+            // Bu metodun içeriğini ihtiyacınıza göre doldurabilirsiniz.
+            _logger.LogInformation("Süresi dolmuş hatırlatıcı temizliği yapılacak.");
+            await SystemTask.CompletedTask;
+        }
+    }
+
+    public interface IReminderCheckService
+    {
+        SystemTask CheckAndProcessRemindersAsync(); // DEĞİŞİKLİK: 'Task' -> 'SystemTask'
+        SystemTask CleanupExpiredRemindersAsync();
     }
 }

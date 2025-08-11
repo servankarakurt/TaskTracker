@@ -4,7 +4,7 @@ using GorevTakipUygulamasi.Data;
 using GorevTakipUygulamasi.Areas.Identity;
 using GorevTakipUygulamasi.Services;
 using Microsoft.AspNetCore.Components.Authorization;
-using GorevTakipUygulamasi.Services.Task;
+using GorevTakipUygulamasi.Services.TaskServices; // DEÐÝÞTÝRÝLDÝ
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -43,7 +43,7 @@ builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 
 // Custom services
-builder.Services.AddScoped<ITaskService, TaskService>();
+builder.Services.AddScoped<ITaskService, TaskService>(); // DEÐÝÞTÝRÝLDÝ
 builder.Services.AddScoped<AuthenticationStateProvider, RevalidatingIdentityAuthenticationStateProvider<IdentityUser>>();
 
 // ? HttpClient and NotificationService - DÜZELTÝLDÝ

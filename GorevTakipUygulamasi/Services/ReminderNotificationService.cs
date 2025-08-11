@@ -1,8 +1,9 @@
 ﻿using GorevTakipUygulamasi.Configuration;
+using GorevTakipUygulamasi.Models;
 using Microsoft.Extensions.Options;
 using System.Text;
 using System.Text.Json;
-using GorevTakipUygulamasi.Models;
+
 
 namespace GorevTakipUygulamasi.Services
 {
@@ -22,7 +23,7 @@ namespace GorevTakipUygulamasi.Services
             _logger = logger;
         }
 
-        public async Task<bool> SendReminderAsync(Reminder reminder)
+        public async Task<bool> SendReminderAsync(ReminderItem reminder)
         {
             try
             {

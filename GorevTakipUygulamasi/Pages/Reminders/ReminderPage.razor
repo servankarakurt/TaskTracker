@@ -2,6 +2,7 @@
 @using GorevTakipUygulamasi.Models
 @using GorevTakipUygulamasi.Services
 @using System.Security.Claims
+@using Microsoft.JSInterop
 @inject IReminderService ReminderService
 @inject AuthenticationStateProvider AuthProvider
 @inject NavigationManager Navigation
@@ -39,7 +40,7 @@ else
                     {
                         <tr>
                             <td>@reminder.Title</td>
-                            <td>@reminder.ReminderDate.ToShortDateString()</td>
+                            <td>@reminder.Date.ToShortDateString() @reminder.Time.ToShortTimeString()</td>
                             <td>@(reminder.IsCompleted ? "Tamamlandı" : "Bekliyor")</td>
                             <td>
                                 <button class="btn btn-primary btn-sm" @onclick="() => OpenEditModal(reminder)">Düzenle</button>
@@ -58,26 +59,27 @@ else
     </div>
 }
 
-
 @if (showModal)
 {
     <div class="modal fade show" tabindex="-1" style="display:block;" role="dialog">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">@(editingReminder.Id != null ? "Hatırlatıcıyı Düzenle" : "Yeni Hatırlatıcı")</h5>
-                    <button type="button" class="close" @onclick="CloseModal">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
+                    <h5 class="modal-title">@(editingReminder.Id != Guid.Empty ? "Hatırlatıcıyı Düzenle" : "Yeni Hatırlatıcı")</h5>
+                    <button type="button" class="btn-close" @onclick="CloseModal"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="form-group">
+                    <div class="form-group mb-3">
                         <label>Başlık:</label>
                         <input class="form-control" @bind="editingReminder.Title" />
                     </div>
-                    <div class="form-group">
+                    <div class="form-group mb-3">
                         <label>Tarih:</label>
-                        <input type="date" class="form-control" @bind="editingReminder.ReminderDate" />
+                        <input type="date" class="form-control" @bind="dateInput" />
+                    </div>
+                    <div class="form-group mb-3">
+                        <label>Saat:</label>
+                        <input type="time" class="form-control" @bind="timeInput" />
                     </div>
                     <div class="form-check">
                         <input type="checkbox" class="form-check-input" @bind="editingReminder.IsCompleted" />
@@ -92,4 +94,132 @@ else
         </div>
     </div>
     <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    private List<ReminderItem> reminders = new();
+    private ReminderItem editingReminder = new();
+    private bool isLoading = true;
+    private bool showModal = false;
+    private string? userId;
+    private DateTime dateInput;
+    private DateTime timeInput;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity is null || !user.Identity.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/Identity/Account/Login?returnUrl=/hatirlatici");
+            return;
+        }
+
+        userId = user.FindFirst(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrEmpty(userId))
+        {
+            return;
+        }
+
+        await LoadReminders();
+    }
+
+    private async Task LoadReminders()
+    {
+        isLoading = true;
+        var serviceResponse = await ReminderService.GetUserRemindersAsync(userId!);
+        if (serviceResponse.IsSuccess)
+        {
+            reminders = serviceResponse.Data ?? new List<ReminderItem>();
+        }
+        else
+        {
+            await JSRuntime.InvokeVoidAsync("alert", serviceResponse.Message);
+        }
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    private void OpenAddModal()
+    {
+        editingReminder = new ReminderItem { Id = Guid.Empty };
+        dateInput = DateTime.Today;
+        timeInput = DateTime.Now;
+        showModal = true;
+    }
+
+    private void OpenEditModal(ReminderItem reminderToEdit)
+    {
+        editingReminder = new ReminderItem
+        {
+            Id = reminderToEdit.Id,
+            Title = reminderToEdit.Title,
+            Description = reminderToEdit.Description,
+            Date = reminderToEdit.Date,
+            Time = reminderToEdit.Time,
+            IsCompleted = reminderToEdit.IsCompleted,
+            EmailReminder = reminderToEdit.EmailReminder
+        };
+        dateInput = reminderToEdit.Date.ToDateTime(TimeOnly.MinValue);
+        timeInput = new DateTime(2000, 1, 1, reminderToEdit.Time.Hour, reminderToEdit.Time.Minute, 0);
+        showModal = true;
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+    }
+
+    private async Task SaveReminder()
+    {
+        if (string.IsNullOrWhiteSpace(editingReminder.Title))
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Başlık boş olamaz!");
+            return;
+        }
+
+        editingReminder.Date = DateOnly.FromDateTime(dateInput);
+        editingReminder.Time = TimeOnly.FromDateTime(timeInput);
+
+        if (editingReminder.Id != Guid.Empty)
+        {
+            var updateDto = new UpdateReminderDto
+            {
+                Title = editingReminder.Title,
+                Description = editingReminder.Description,
+                Date = editingReminder.Date,
+                Time = editingReminder.Time,
+                EmailReminder = editingReminder.EmailReminder,
+                IsCompleted = editingReminder.IsCompleted
+            };
+            await ReminderService.UpdateReminderAsync(editingReminder.Id, updateDto, userId!);
+        }
+        else
+        {
+            var createDto = new CreateReminderDto
+            {
+                Title = editingReminder.Title,
+                Description = editingReminder.Description,
+                Date = editingReminder.Date,
+                Time = editingReminder.Time,
+                EmailReminder = editingReminder.EmailReminder
+            };
+            await ReminderService.CreateReminderAsync(createDto, userId!);
+        }
+
+        CloseModal();
+        await LoadReminders();
+    }
+
+    private async Task DeleteReminder(ReminderItem reminderToDelete)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"'{reminderToDelete.Title}' başlıklı hatırlatıcıyı silmek istediğinize emin misiniz?");
+        if (confirmed)
+        {
+            await ReminderService.DeleteReminderAsync(reminderToDelete.Id, userId!);
+            await LoadReminders();
+        }
+    }
 }

@@ -92,16 +92,31 @@ namespace GorevTakipUygulamasi.Pages
                 return;
             }
 
-            // Eğer Id null değilse bu bir güncellemedir, aksi halde yeni kayıttır.
-            if (!string.IsNullOrEmpty(editingReminder.Id))
+            // Eğer Id Guid.Empty değilse bu bir güncellemedir, aksi halde yeni kayıttır.
+            if (editingReminder.Id != Guid.Empty)
             {
                 // GÜNCELLEME İŞLEMİ
-                await ReminderService.UpdateReminderAsync(editingReminder, userId!);
+                await ReminderService.UpdateReminderAsync(editingReminder.Id, new UpdateReminderDto
+                {
+                    Title = editingReminder.Title,
+                    Description = editingReminder.Description,
+                    Date = DateOnly.FromDateTime(editingReminder.ReminderDate),
+                    Time = TimeOnly.FromDateTime(editingReminder.ReminderDate),
+                    EmailReminder = editingReminder.EmailReminder,
+                    IsCompleted = editingReminder.IsCompleted
+                }, userId!);
             }
             else
             {
                 // YENİ KAYIT İŞLEMİ
-                await ReminderService.CreateReminderAsync(editingReminder, userId!);
+                await ReminderService.CreateReminderAsync(new CreateReminderDto
+                {
+                    Title = editingReminder.Title,
+                    Description = editingReminder.Description,
+                    Date = DateOnly.FromDateTime(editingReminder.ReminderDate),
+                    Time = TimeOnly.FromDateTime(editingReminder.ReminderDate),
+                    EmailReminder = editingReminder.EmailReminder
+                }, userId!);
             }
 
             CloseModal();
@@ -114,7 +129,7 @@ namespace GorevTakipUygulamasi.Pages
             var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"'{reminderToDelete.Title}' başlıklı hatırlatıcıyı silmek istediğinize emin misiniz?");
             if (confirmed)
             {
-                await ReminderService.DeleteReminderAsync(reminderToDelete.Id!, userId!);
+                await ReminderService.DeleteReminderAsync(reminderToDelete.Id, userId!);
                 await LoadReminders(); // Listeyi yeniliyoruz.
             }
         }

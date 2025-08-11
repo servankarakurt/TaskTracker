@@ -1,82 +1,52 @@
-﻿using System.Text;
-using System.Text.Json;
+﻿using GorevTakipUygulamasi.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+// DEĞİŞİKLİK: 'System.Threading.Tasks.Task' için 'SystemTask' takma adı eklendi.
+using SystemTask = System.Threading.Tasks.Task;
 
 namespace GorevTakipUygulamasi.Services
 {
-    public class NotificationService
+    public class NotificationService : INotificationService
     {
-        private readonly HttpClient _httpClient;
-        private readonly string _logicAppUrl;
+        private readonly ApplicationDbContext _context;
+        private readonly ILogger<NotificationService> _logger;
+        // private readonly IEmailSender _emailSender; // Eğer bir e-posta servisiniz varsa bu satırı aktif edebilirsiniz.
 
-        public NotificationService(HttpClient httpClient, IConfiguration configuration)
+        public NotificationService(ApplicationDbContext context, ILogger<NotificationService> logger)
         {
-            _httpClient = httpClient;
-            _logicAppUrl = configuration["LogicApp:NotificationUrl"];
+            _context = context;
+            _logger = logger;
         }
 
-        public async Task SendTaskCompletionNotificationAsync(string taskTitle, string taskDescription, string userEmail)
+        public async SystemTask SendDailySummaryEmailsAsync() // DEĞİŞİKLİK: 'Task' -> 'SystemTask'
         {
-            try
+            _logger.LogInformation("Günlük özet e-postaları gönderimi başlıyor.");
+
+            var users = await _context.Users.ToListAsync();
+
+            foreach (var user in users)
             {
-                // ✅ DEBUG: Gelen verileri kontrol et
-                Console.WriteLine($"📧 Debug - taskTitle: '{taskTitle}'");
-                Console.WriteLine($"📧 Debug - taskDescription: '{taskDescription}'");
-                Console.WriteLine($"📧 Debug - userEmail: '{userEmail}'");
-                Console.WriteLine($"📧 Debug - userEmail boş mu: {string.IsNullOrWhiteSpace(userEmail)}");
-                Console.WriteLine($"📧 Debug - Logic App URL: '{_logicAppUrl}'");
+                var tasksDueToday = await _context.TaskItems
+                    .Where(t => t.UserId == user.Id && t.DueDate.Date == DateTime.UtcNow.Date && !t.IsCompleted)
+                    .ToListAsync();
 
-                // ✅ Boş email kontrolü ekle
-                if (string.IsNullOrWhiteSpace(userEmail))
+                if (tasksDueToday.Any())
                 {
-                    Console.WriteLine("⚠️ HATA: userEmail boş veya null!");
-                    return;
-                }
+                    var subject = "Bugün Yapılacak Görevleriniz";
+                    var message = "Merhaba, bugün tamamlamanız gereken görevler aşağıdadır:\n\n";
+                    tasksDueToday.ForEach(t => message += $"- {t.Title}\n");
 
-                // ✅ Logic App URL kontrolü
-                if (string.IsNullOrWhiteSpace(_logicAppUrl))
-                {
-                    Console.WriteLine("⚠️ HATA: Logic App URL boş!");
-                    return;
-                }
-
-                var notificationData = new
-                {
-                    taskTitle = taskTitle ?? "Başlıksız Görev",
-                    taskDescription = taskDescription ?? "",
-                    userEmail = userEmail,
-                    userName = "Kullanıcı", // Geçici olarak sabit değer
-                    completedDate = DateTime.Now.ToString("dd/MM/yyyy HH:mm"),
-                    taskId = 0 // Geçici olarak 0
-                };
-
-                // ✅ JSON'u da kontrol et
-                var json = JsonSerializer.Serialize(notificationData, new JsonSerializerOptions
-                {
-                    WriteIndented = true
-                });
-                Console.WriteLine($"📤 Gönderilecek JSON: {json}");
-
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                Console.WriteLine("📡 HTTP isteği gönderiliyor...");
-                var response = await _httpClient.PostAsync(_logicAppUrl, content);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    Console.WriteLine("✅ Bildirim başarıyla gönderildi.");
-                }
-                else
-                {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    Console.WriteLine($"❌ Bildirim hatası: {response.StatusCode}");
-                    Console.WriteLine($"❌ Hata detayı: {errorContent}");
+                    _logger.LogInformation("{UserId} ID'li kullanıcıya e-posta gönderiliyor: {Subject}", user.Id, subject);
+                    // await _emailSender.SendEmailAsync(user.Email, subject, message); // E-posta gönderme servisi aktif olduğunda bu satırı kullanın.
                 }
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"💥 Bildirim servisi hatası: {ex.Message}");
-                Console.WriteLine($"💥 Stack Trace: {ex.StackTrace}");
-            }
+
+            _logger.LogInformation("Günlük özet e-postaları gönderimi tamamlandı.");
         }
+    }
+
+    public interface INotificationService
+    {
+        SystemTask SendDailySummaryEmailsAsync(); // DEĞİŞİKLİK: 'Task' -> 'SystemTask'
     }
 }

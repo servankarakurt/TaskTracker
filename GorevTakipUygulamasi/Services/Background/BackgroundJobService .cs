@@ -4,7 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Linq;
-using System.Threading.Tasks; // Artık normal şekilde kullanabiliriz.
+using System.Threading.Tasks;
+using Hangfire;
 
 namespace GorevTakipUygulamasi.Services.Background
 {
@@ -23,7 +24,8 @@ namespace GorevTakipUygulamasi.Services.Background
             // _notificationService = notificationService;
         }
 
-        public async Task ProcessPendingEmailRemindersAsync()
+        [DisableConcurrentExecution(timeoutInSeconds: 10 * 60)]
+        public async System.Threading.Tasks.Task ProcessPendingEmailRemindersAsync()
         {
             _logger.LogInformation("Bekleyen e-posta hatırlatıcıları işleniyor...");
 
@@ -45,16 +47,18 @@ namespace GorevTakipUygulamasi.Services.Background
             }
         }
 
-        public Task CleanupExpiredRemindersAsync()
+        [DisableConcurrentExecution(timeoutInSeconds: 10 * 60)]
+        public System.Threading.Tasks.Task CleanupExpiredRemindersAsync()
         {
             _logger.LogInformation("Süresi geçmiş hatırlatıcılar temizleniyor...");
-            return Task.CompletedTask; // async olmadığı için direkt Task döndürüyoruz.
+            return System.Threading.Tasks.Task.CompletedTask; // async olmadığı için direkt Task döndürüyoruz.
         }
 
-        public Task SendDailySummaryEmailsAsync()
+        [DisableConcurrentExecution(timeoutInSeconds: 10 * 60)]
+        public System.Threading.Tasks.Task SendDailySummaryEmailsAsync()
         {
             _logger.LogInformation("Günlük özet e-postaları gönderiliyor...");
-            return Task.CompletedTask; // async olmadığı için direkt Task döndürüyoruz.
+            return System.Threading.Tasks.Task.CompletedTask; // async olmadığı için direkt Task döndürüyoruz.
         }
     }
 }

@@ -1,11 +1,9 @@
-﻿using Task = System.Threading.Tasks.Task;
-
-namespace GorevTakipUygulamasi.Services.Background
+﻿namespace GorevTakipUygulamasi.Services.Background
 {
     public interface IBackgroundJobService
     {
-        Task ProcessPendingEmailRemindersAsync();
-        Task CleanupExpiredRemindersAsync();
-        Task SendDailySummaryEmailsAsync();
+        System.Threading.Tasks.Task ProcessPendingEmailRemindersAsync();
+        System.Threading.Tasks.Task CleanupExpiredRemindersAsync();
+        System.Threading.Tasks.Task SendDailySummaryEmailsAsync();
     }
 }
