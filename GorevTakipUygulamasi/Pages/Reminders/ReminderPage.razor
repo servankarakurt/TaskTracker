@@ -1,858 +1,95 @@
 ﻿@page "/hatirlatici"
-@using System.Globalization
+@using GorevTakipUygulamasi.Models
+@using GorevTakipUygulamasi.Services
+@using System.Security.Claims
+@inject IReminderService ReminderService
+@inject AuthenticationStateProvider AuthProvider
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
 
-<PageTitle>Hatırlatıcılarım</PageTitle>
+<PageTitle>Hatırlatıcılar</PageTitle>
 
-<div class="reminder-container">
-    <!-- Header -->
-    <div class="page-header">
-        <button class="btn-back" @onclick="GoBack">
-            <i class="fas fa-arrow-left"></i>
-        </button>
-        <h1 class="page-title">Hatırlatıcılar</h1>
-        <button class="btn-add" @onclick="ShowAddReminderModal">
-            <i class="fas fa-plus"></i>
-        </button>
-    </div>
+<h3>Takvim ve Hatırlatıcılar</h3>
 
-    <div class="content-wrapper">
-        <!-- Takvim Bölümü -->
-        <div class="calendar-section">
-            <div class="calendar-header">
-                <button class="nav-btn" @onclick="PreviousMonth">
-                    <i class="fas fa-chevron-left"></i>
-                </button>
-                <h2 class="month-year">@currentDate.ToString("MMMM yyyy", new CultureInfo("tr-TR"))</h2>
-                <button class="nav-btn" @onclick="NextMonth">
-                    <i class="fas fa-chevron-right"></i>
-                </button>
-            </div>
+@if (isLoading)
+{
+    <p><em>Yükleniyor...</em></p>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-8">
+            <h4>Takvim</h4>
+            <p>Bu alanda takvim gösterimi yer alacak.</p>
 
-            <div class="calendar-grid">
-                <!-- Gün başlıkları -->
-                <div class="day-header">Pt</div>
-                <div class="day-header">Sa</div>
-                <div class="day-header">Ça</div>
-                <div class="day-header">Pe</div>
-                <div class="day-header">Cu</div>
-                <div class="day-header">Ct</div>
-                <div class="day-header">Pz</div>
+            <hr />
 
-                <!-- Takvim günleri -->
-                @foreach (var day in GetCalendarDays())
-                {
-                    <div class="calendar-day @GetDayClass(day)" @onclick="() => SelectDay(day)">
-                        <span class="day-number">@day.Day</span>
-                        @if (HasReminders(day))
-                        {
-                            <div class="reminder-indicator">
-                                <span class="reminder-count">@GetReminderCount(day)</span>
-                            </div>
-                        }
-                    </div>
-                }
-            </div>
-        </div>
-
-        <!-- Hatırlatıcı Listesi -->
-        <div class="reminders-section">
-            <div class="reminders-header">
-                <h3>@selectedDate.ToString("dd MMMM yyyy", new CultureInfo("tr-TR"))</h3>
-                <span class="reminder-badge">@GetSelectedDayReminders().Count</span>
-            </div>
-
-            <div class="reminders-list">
-                @if (GetSelectedDayReminders().Any())
-                {
-                    @foreach (var reminder in GetSelectedDayReminders().OrderBy(r => r.Time))
+            <h4>Hatırlatıcı Listesi</h4>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Başlık</th>
+                        <th>Tarih</th>
+                        <th>Durum</th>
+                        <th>İşlemler</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var reminder in reminders)
                     {
-                        <div class="reminder-item @(reminder.IsCompleted ? "completed" : "")">
-                            <div class="reminder-content">
-                                <div class="reminder-time">@reminder.Time.ToString("HH:mm")</div>
-                                <div class="reminder-details">
-                                    <div class="reminder-title">@reminder.Title</div>
-                                    @if (!string.IsNullOrEmpty(reminder.Description))
-                                    {
-                                        <div class="reminder-description">@reminder.Description</div>
-                                    }
-                                </div>
-                            </div>
-                            <div class="reminder-actions">
-                                <button class="btn-toggle" @onclick="() => ToggleReminder(reminder)">
-                                    <i class="fas @(reminder.IsCompleted ? "fa-check-circle" : "fa-circle")"></i>
-                                </button>
-                                <button class="btn-edit" @onclick="() => EditReminder(reminder)">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn-delete" @onclick="() => DeleteReminder(reminder)">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </div>
+                        <tr>
+                            <td>@reminder.Title</td>
+                            <td>@reminder.ReminderDate.ToShortDateString()</td>
+                            <td>@(reminder.IsCompleted ? "Tamamlandı" : "Bekliyor")</td>
+                            <td>
+                                <button class="btn btn-primary btn-sm" @onclick="() => OpenEditModal(reminder)">Düzenle</button>
+                                <button class="btn btn-danger btn-sm" @onclick="() => DeleteReminder(reminder)">Sil</button>
+                            </td>
+                        </tr>
                     }
-                }
-                else
-                {
-                    <div class="no-reminders">
-                        <i class="fas fa-calendar-check"></i>
-                        <p>Bu gün için hatırlatıcı bulunmamaktadır.</p>
-                        <button class="btn-add-reminder" @onclick="ShowAddReminderModal">
-                            Hatırlatıcı Ekle
-                        </button>
-                    </div>
-                }
-            </div>
+                </tbody>
+            </table>
+        </div>
+        <div class="col-md-4">
+            <button class="btn btn-success" @onclick="OpenAddModal">
+                <i class="oi oi-plus"></i> Yeni Hatırlatıcı Ekle
+            </button>
         </div>
     </div>
+}
 
-    <!-- Hatırlatıcı Ekleme/Düzenleme Modal -->
-    @if (showModal)
-    {
-        <div class="modal-overlay" @onclick="CloseModal">
-            <div class="modal-content" @onclick:stopPropagation="true">
+
+@if (showModal)
+{
+    <div class="modal fade show" tabindex="-1" style="display:block;" role="dialog">
+        <div class="modal-dialog">
+            <div class="modal-content">
                 <div class="modal-header">
-                    <h3>@(editingReminder != null ? "Hatırlatıcıyı Düzenle" : "Yeni Hatırlatıcı")</h3>
-                    <button class="btn-close" @onclick="CloseModal">
-                        <i class="fas fa-times"></i>
+                    <h5 class="modal-title">@(editingReminder.Id != null ? "Hatırlatıcıyı Düzenle" : "Yeni Hatırlatıcı")</h5>
+                    <button type="button" class="close" @onclick="CloseModal">
+                        <span aria-hidden="true">&times;</span>
                     </button>
                 </div>
                 <div class="modal-body">
                     <div class="form-group">
-                        <label>Başlık</label>
-                        <input type="text" @bind="modalTitle" placeholder="Hatırlatıcı başlığı..." />
+                        <label>Başlık:</label>
+                        <input class="form-control" @bind="editingReminder.Title" />
                     </div>
                     <div class="form-group">
-                        <label>Açıklama</label>
-                        <textarea @bind="modalDescription" placeholder="Detaylar (isteğe bağlı)..." rows="3"></textarea>
+                        <label>Tarih:</label>
+                        <input type="date" class="form-control" @bind="editingReminder.ReminderDate" />
                     </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Tarih</label>
-                            <input type="date" @bind="modalDate" />
-                        </div>
-                        <div class="form-group">
-                            <label>Saat</label>
-                            <input type="time" @bind="modalTime" />
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" @bind="modalEmailReminder" />
-                            <span class="checkmark"></span>
-                            Email hatırlatıcısı gönder
-                        </label>
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" @bind="editingReminder.IsCompleted" />
+                        <label class="form-check-label">Tamamlandı mı?</label>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn-cancel" @onclick="CloseModal">İptal</button>
-                    <button class="btn-save" @onclick="SaveReminder">
-                        @(editingReminder != null ? "Güncelle" : "Kaydet")
-                    </button>
+                    <button type="button" class="btn btn-secondary" @onclick="CloseModal">Kapat</button>
+                    <button type="button" class="btn btn-primary" @onclick="SaveReminder">Kaydet</button>
                 </div>
             </div>
         </div>
-    }
-</div>
-
-@code {
-    // Veri modelleri ve durumlar
-    private DateTime currentDate = DateTime.Now;
-    private DateTime selectedDate = DateTime.Today;
-    private List<ReminderItem> reminders = new();
-
-    // Modal durumları
-    private bool showModal = false;
-    private ReminderItem? editingReminder = null;
-    private string modalTitle = "";
-    private string modalDescription = "";
-    private DateOnly modalDate = DateOnly.FromDateTime(DateTime.Today);
-    private TimeOnly modalTime = TimeOnly.FromDateTime(DateTime.Now.AddHours(1));
-    private bool modalEmailReminder = true;
-
-    protected override void OnInitialized()
-    {
-        // Örnek veri
-        LoadSampleData();
-    }
-
-    private void LoadSampleData()
-    {
-        reminders.AddRange(new[]
-        {
-            new ReminderItem
-            {
-                Id = Guid.NewGuid(),
-                Title = "Toplantı",
-                Description = "Proje değerlendirme toplantısı",
-                Date = DateOnly.FromDateTime(DateTime.Today),
-                Time = TimeOnly.FromDateTime(DateTime.Now.AddHours(2)),
-                EmailReminder = true,
-                IsCompleted = false
-            },
-            new ReminderItem
-            {
-                Id = Guid.NewGuid(),
-                Title = "İlaç Al",
-                Date = DateOnly.FromDateTime(DateTime.Today.AddDays(1)),
-                Time = new TimeOnly(9, 0),
-                EmailReminder = true,
-                IsCompleted = false
-            },
-            new ReminderItem
-            {
-                Id = Guid.NewGuid(),
-                Title = "Doktor Randevusu",
-                Description = "Kontrol muayenesi",
-                Date = DateOnly.FromDateTime(DateTime.Today.AddDays(3)),
-                Time = new TimeOnly(14, 30),
-                EmailReminder = true,
-                IsCompleted = false
-            }
-        });
-    }
-
-    // Takvim navigation
-    private void PreviousMonth()
-    {
-        currentDate = currentDate.AddMonths(-1);
-    }
-
-    private void NextMonth()
-    {
-        currentDate = currentDate.AddMonths(1);
-    }
-
-    private void SelectDay(DateTime day)
-    {
-        selectedDate = day;
-    }
-
-    // Takvim günleri oluşturma
-    private List<DateTime> GetCalendarDays()
-    {
-        var days = new List<DateTime>();
-        var firstDayOfMonth = new DateTime(currentDate.Year, currentDate.Month, 1);
-        var lastDayOfMonth = firstDayOfMonth.AddMonths(1).AddDays(-1);
-
-        // Ayın başındaki boş günler
-        var firstDayOfWeek = (int)firstDayOfMonth.DayOfWeek;
-        firstDayOfWeek = firstDayOfWeek == 0 ? 7 : firstDayOfWeek; // Pazartesi = 1
-
-        for (int i = firstDayOfWeek - 1; i > 0; i--)
-        {
-            days.Add(firstDayOfMonth.AddDays(-i));
-        }
-
-        // Ayın günleri
-        for (var day = firstDayOfMonth; day <= lastDayOfMonth; day = day.AddDays(1))
-        {
-            days.Add(day);
-        }
-
-        // Ayın sonundaki boş günler
-        while (days.Count < 42)
-        {
-            days.Add(days.Last().AddDays(1));
-        }
-
-        return days;
-    }
-
-    private string GetDayClass(DateTime day)
-    {
-        var classes = new List<string>();
-
-        if (day.Month != currentDate.Month)
-            classes.Add("other-month");
-
-        if (day.Date == DateTime.Today)
-            classes.Add("today");
-
-        if (day.Date == selectedDate.Date)
-            classes.Add("selected");
-
-        if (HasReminders(day))
-            classes.Add("has-reminders");
-
-        return string.Join(" ", classes);
-    }
-
-    // Hatırlatıcı yardımcı metodlar
-    private bool HasReminders(DateTime day)
-    {
-        return reminders.Any(r => r.Date == DateOnly.FromDateTime(day));
-    }
-
-    private int GetReminderCount(DateTime day)
-    {
-        return reminders.Count(r => r.Date == DateOnly.FromDateTime(day));
-    }
-
-    private List<ReminderItem> GetSelectedDayReminders()
-    {
-        return reminders.Where(r => r.Date == DateOnly.FromDateTime(selectedDate)).ToList();
-    }
-
-    // Modal işlemleri
-    private void ShowAddReminderModal()
-    {
-        editingReminder = null;
-        modalTitle = "";
-        modalDescription = "";
-        modalDate = DateOnly.FromDateTime(selectedDate);
-        modalTime = TimeOnly.FromDateTime(DateTime.Now.AddHours(1));
-        modalEmailReminder = true;
-        showModal = true;
-    }
-
-    private void EditReminder(ReminderItem reminder)
-    {
-        editingReminder = reminder;
-        modalTitle = reminder.Title;
-        modalDescription = reminder.Description ?? "";
-        modalDate = reminder.Date;
-        modalTime = reminder.Time;
-        modalEmailReminder = reminder.EmailReminder;
-        showModal = true;
-    }
-
-    private void CloseModal()
-    {
-        showModal = false;
-        editingReminder = null;
-    }
-
-    private async Task SaveReminder()
-    {
-        if (string.IsNullOrWhiteSpace(modalTitle))
-            return;
-
-        if (editingReminder != null)
-        {
-            // Güncelleme
-            editingReminder.Title = modalTitle;
-            editingReminder.Description = modalDescription;
-            editingReminder.Date = modalDate;
-            editingReminder.Time = modalTime;
-            editingReminder.EmailReminder = modalEmailReminder;
-        }
-        else
-        {
-            // Yeni ekleme
-            var newReminder = new ReminderItem
-            {
-                Id = Guid.NewGuid(),
-                Title = modalTitle,
-                Description = modalDescription,
-                Date = modalDate,
-                Time = modalTime,
-                EmailReminder = modalEmailReminder,
-                IsCompleted = false
-            };
-            reminders.Add(newReminder);
-        }
-
-        CloseModal();
-        StateHasChanged();
-
-        // Burada Azure Storage'a kaydetme işlemi yapılacak
-        // await ReminderService.SaveReminderAsync(reminder);
-    }
-
-    private async Task DeleteReminder(ReminderItem reminder)
-    {
-        reminders.Remove(reminder);
-        StateHasChanged();
-
-        // Burada Azure Storage'dan silme işlemi yapılacak
-        // await ReminderService.DeleteReminderAsync(reminder.Id);
-    }
-
-    private async Task ToggleReminder(ReminderItem reminder)
-    {
-        reminder.IsCompleted = !reminder.IsCompleted;
-        StateHasChanged();
-
-        // Burada Azure Storage'da güncelleme işlemi yapılacak
-        // await ReminderService.UpdateReminderAsync(reminder);
-    }
-
-    private void GoBack()
-    {
-        // Navigation logic
-    }
-
-    // Model sınıfları
-    public class ReminderItem
-    {
-        public Guid Id { get; set; }
-        public string Title { get; set; } = "";
-        public string? Description { get; set; }
-        public DateOnly Date { get; set; }
-        public TimeOnly Time { get; set; }
-        public bool EmailReminder { get; set; }
-        public bool IsCompleted { get; set; }
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    }
+    </div>
+    <div class="modal-backdrop fade show"></div>
 }
-
-<style>
-    /* Ana container */
-    .reminder-container {
-        max-width: 480px;
-        margin: 0 auto;
-        min-height: 100vh;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    }
-
-    /* Header */
-    .page-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 20px;
-        color: white;
-    }
-
-    .btn-back, .btn-add {
-        background: rgba(255, 255, 255, 0.2);
-        border: none;
-        border-radius: 12px;
-        width: 44px;
-        height: 44px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-
-        .btn-back:hover, .btn-add:hover {
-            background: rgba(255, 255, 255, 0.3);
-            transform: scale(1.05);
-        }
-
-    .page-title {
-        font-size: 20px;
-        font-weight: 600;
-        margin: 0;
-    }
-
-    /* İçerik wrapper */
-    .content-wrapper {
-        background: white;
-        border-radius: 24px 24px 0 0;
-        min-height: calc(100vh - 84px);
-        overflow: hidden;
-    }
-
-    /* Takvim bölümü */
-    .calendar-section {
-        padding: 20px;
-        border-bottom: 1px solid #f0f0f0;
-    }
-
-    .calendar-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 20px;
-    }
-
-    .nav-btn {
-        background: #f5f5f5;
-        border: none;
-        border-radius: 8px;
-        width: 36px;
-        height: 36px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-
-        .nav-btn:hover {
-            background: #e5e5e5;
-        }
-
-    .month-year {
-        font-size: 18px;
-        font-weight: 600;
-        margin: 0;
-        text-transform: capitalize;
-    }
-
-    /* Takvim grid */
-    .calendar-grid {
-        display: grid;
-        grid-template-columns: repeat(7, 1fr);
-        gap: 1px;
-        background: #f0f0f0;
-        border-radius: 12px;
-        overflow: hidden;
-    }
-
-    .day-header {
-        background: #f8f9fa;
-        text-align: center;
-        padding: 12px 4px;
-        font-size: 12px;
-        font-weight: 600;
-        color: #666;
-        text-transform: uppercase;
-    }
-
-    .calendar-day {
-        background: white;
-        aspect-ratio: 1;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition: all 0.2s;
-        position: relative;
-        min-height: 42px;
-    }
-
-        .calendar-day:hover {
-            background: #f8f9fa;
-        }
-
-        .calendar-day.selected {
-            background: #667eea;
-            color: white;
-        }
-
-        .calendar-day.today .day-number {
-            background: #ff6b6b;
-            color: white;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .calendar-day.other-month {
-            color: #ccc;
-        }
-
-    .day-number {
-        font-size: 14px;
-        font-weight: 500;
-    }
-
-    .reminder-indicator {
-        position: absolute;
-        bottom: 2px;
-        right: 2px;
-        background: #667eea;
-        color: white;
-        border-radius: 50%;
-        width: 16px;
-        height: 16px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 10px;
-        font-weight: 600;
-    }
-
-    .calendar-day.selected .reminder-indicator {
-        background: rgba(255, 255, 255, 0.8);
-        color: #667eea;
-    }
-
-    /* Hatırlatıcılar bölümü */
-    .reminders-section {
-        padding: 20px;
-    }
-
-    .reminders-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 16px;
-    }
-
-        .reminders-header h3 {
-            margin: 0;
-            font-size: 18px;
-            font-weight: 600;
-            color: #333;
-            text-transform: capitalize;
-        }
-
-    .reminder-badge {
-        background: #667eea;
-        color: white;
-        border-radius: 12px;
-        padding: 4px 12px;
-        font-size: 12px;
-        font-weight: 600;
-    }
-
-    /* Hatırlatıcı listesi */
-    .reminders-list {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-    }
-
-    .reminder-item {
-        background: #f8f9fa;
-        border-radius: 12px;
-        padding: 16px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        transition: all 0.2s;
-    }
-
-        .reminder-item:hover {
-            background: #e9ecef;
-        }
-
-        .reminder-item.completed {
-            opacity: 0.6;
-        }
-
-            .reminder-item.completed .reminder-title {
-                text-decoration: line-through;
-            }
-
-    .reminder-content {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        flex: 1;
-    }
-
-    .reminder-time {
-        background: #667eea;
-        color: white;
-        padding: 6px 12px;
-        border-radius: 8px;
-        font-size: 12px;
-        font-weight: 600;
-        min-width: 50px;
-        text-align: center;
-    }
-
-    .reminder-details {
-        flex: 1;
-    }
-
-    .reminder-title {
-        font-weight: 600;
-        color: #333;
-        margin-bottom: 2px;
-    }
-
-    .reminder-description {
-        font-size: 14px;
-        color: #666;
-    }
-
-    .reminder-actions {
-        display: flex;
-        gap: 8px;
-    }
-
-    .btn-toggle, .btn-edit, .btn-delete {
-        background: transparent;
-        border: none;
-        border-radius: 6px;
-        width: 32px;
-        height: 32px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-
-        .btn-toggle:hover {
-            background: #e8f5e8;
-            color: #28a745;
-        }
-
-        .btn-edit:hover {
-            background: #fff3cd;
-            color: #ffc107;
-        }
-
-        .btn-delete:hover {
-            background: #f8d7da;
-            color: #dc3545;
-        }
-
-    /* Boş durum */
-    .no-reminders {
-        text-align: center;
-        padding: 40px 20px;
-        color: #999;
-    }
-
-        .no-reminders i {
-            font-size: 48px;
-            margin-bottom: 16px;
-            color: #ddd;
-        }
-
-        .no-reminders p {
-            margin-bottom: 20px;
-        }
-
-    .btn-add-reminder {
-        background: #667eea;
-        color: white;
-        border: none;
-        border-radius: 12px;
-        padding: 12px 24px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-
-        .btn-add-reminder:hover {
-            background: #5a67d8;
-            transform: translateY(-2px);
-        }
-
-    /* Modal */
-    .modal-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
-        padding: 20px;
-    }
-
-    .modal-content {
-        background: white;
-        border-radius: 16px;
-        width: 100%;
-        max-width: 400px;
-        max-height: 90vh;
-        overflow: hidden;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    }
-
-    .modal-header {
-        padding: 20px;
-        border-bottom: 1px solid #f0f0f0;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-
-        .modal-header h3 {
-            margin: 0;
-            font-size: 18px;
-            font-weight: 600;
-        }
-
-    .btn-close {
-        background: transparent;
-        border: none;
-        font-size: 20px;
-        cursor: pointer;
-        color: #999;
-    }
-
-    .modal-body {
-        padding: 20px;
-        max-height: 60vh;
-        overflow-y: auto;
-    }
-
-    .form-group {
-        margin-bottom: 16px;
-    }
-
-    .form-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 12px;
-    }
-
-    .form-group label {
-        display: block;
-        margin-bottom: 6px;
-        font-weight: 600;
-        color: #333;
-        font-size: 14px;
-    }
-
-    .form-group input, .form-group textarea {
-        width: 100%;
-        padding: 12px;
-        border: 2px solid #f0f0f0;
-        border-radius: 8px;
-        font-size: 14px;
-        transition: border-color 0.2s;
-        box-sizing: border-box;
-    }
-
-        .form-group input:focus, .form-group textarea:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-    .checkbox-label {
-        display: flex !important;
-        align-items: center;
-        gap: 8px;
-        cursor: pointer;
-        font-weight: normal !important;
-    }
-
-    .modal-footer {
-        padding: 20px;
-        border-top: 1px solid #f0f0f0;
-        display: flex;
-        gap: 12px;
-        justify-content: flex-end;
-    }
-
-    .btn-cancel, .btn-save {
-        padding: 12px 24px;
-        border: none;
-        border-radius: 8px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-
-    .btn-cancel {
-        background: #f8f9fa;
-        color: #666;
-    }
-
-        .btn-cancel:hover {
-            background: #e9ecef;
-        }
-
-    .btn-save {
-        background: #667eea;
-        color: white;
-    }
-
-        .btn-save:hover {
-            background: #5a67d8;
-        }
-</style>

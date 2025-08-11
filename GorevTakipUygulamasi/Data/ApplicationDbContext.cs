@@ -10,5 +10,6 @@ namespace GorevTakipUygulamasi.Data
         {
         }
         public DbSet<TaskItem> TaskItems { get; set; } 
+        public DbSet<ReminderItem> Reminders { get; set; } // Hatırlatıcılar için DbSet eklendi
     }
 }

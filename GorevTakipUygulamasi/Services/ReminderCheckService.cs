@@ -1,16 +1,21 @@
 ﻿using GorevTakipUygulamasi.Services.Background;
+using Microsoft.Extensions.DependencyInjection; // Eksik using eklendi
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Threading;
+// 'Task' çakışmasını çözmek için tam yoluyla belirtiyoruz:
+using System.Threading.Tasks;
 
 namespace GorevTakipUygulamasi.Services
 {
-    public class ReminderCheckService
+    public class ReminderCheckService : BackgroundService
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<ReminderCheckService> _logger;
-        private readonly TimeSpan _checkInterval = TimeSpan.FromMinutes(5); // 5 dakikada bir kontrol
+        private readonly TimeSpan _checkInterval = TimeSpan.FromMinutes(1);
 
-        public ReminderCheckService(
-            IServiceProvider serviceProvider,
-            ILogger<ReminderCheckService> logger)
+        public ReminderCheckService(IServiceProvider serviceProvider, ILogger<ReminderCheckService> logger)
         {
             _serviceProvider = serviceProvider;
             _logger = logger;
@@ -18,60 +23,31 @@ namespace GorevTakipUygulamasi.Services
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _logger.LogInformation("Hatırlatıcı kontrol servisi başlatıldı. Kontrol aralığı: {Interval}", _checkInterval);
+            _logger.LogInformation("Hatırlatıcı kontrol servisi başlatıldı.");
 
             while (!stoppingToken.IsCancellationRequested)
             {
+                _logger.LogInformation("Arka plan işleri tetikleniyor. Zaman: {time}", DateTimeOffset.Now);
+
                 try
                 {
-                    using var scope = _serviceProvider.CreateScope();
-                    var backgroundJobService = scope.ServiceProvider.GetRequiredService<IBackgroundJobService>();
-
-                    // Ana iş: Email hatırlatıcılarını kontrol et
-                    await backgroundJobService.ProcessPendingEmailRemindersAsync();
-
-                    // Saatlik temizlik (sadece her saat başı)
-                    if (DateTime.Now.Minute == 0)
+                    // Her döngüde yeni bir 'scope' oluşturarak servisleri doğru şekilde alıyoruz.
+                    using (var scope = _serviceProvider.CreateScope())
                     {
-                        await backgroundJobService.CleanupExpiredRemindersAsync();
-                    }
-
-                    // Günlük özet (sadece sabah 08:00'de)
-                    if (DateTime.Now.Hour == 8 && DateTime.Now.Minute == 0)
-                    {
-                        await backgroundJobService.SendDailySummaryEmailsAsync();
+                        var backgroundJobService = scope.ServiceProvider.GetRequiredService<IBackgroundJobService>();
+                        await backgroundJobService.ProcessPendingEmailRemindersAsync();
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Hatırlatıcı kontrol servisi hatası");
+                    _logger.LogError(ex, "Arka plan işi yürütülürken hata oluştu.");
                 }
 
-                // Belirtilen aralıkta bekle
-                try
-                {
-                    await Task.Delay(_checkInterval, stoppingToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    // Servis durdurulduğunda normal davranış
-                    break;
-                }
+                // Bir sonraki döngüye kadar bekle.
+                await System.Threading.Tasks.Task.Delay(_checkInterval, stoppingToken);
             }
 
-            _logger.LogInformation("Hatırlatıcı kontrol servisi durduruldu.");
-        }
-
-        public override async Task StartAsync(CancellationToken cancellationToken)
-        {
-            _logger.LogInformation("Hatırlatıcı kontrol servisi başlatılıyor...");
-            await base.StartAsync(cancellationToken);
-        }
-
-        public override async Task StopAsync(CancellationToken cancellationToken)
-        {
-            _logger.LogInformation("Hatırlatıcı kontrol servisi durduruluyor...");
-            await base.StopAsync(cancellationToken);
+            _logger.LogInformation("Hatırlatıcı kontrol servisi durduruluyor.");
         }
     }
 }

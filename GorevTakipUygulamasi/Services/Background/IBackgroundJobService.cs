@@ -1,4 +1,6 @@
-﻿namespace GorevTakipUygulamasi.Services.Background
+﻿using Task = System.Threading.Tasks.Task;
+
+namespace GorevTakipUygulamasi.Services.Background
 {
     public interface IBackgroundJobService
     {
