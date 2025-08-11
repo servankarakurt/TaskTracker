@@ -1,9 +1,10 @@
 ﻿@page "/gorevler"
 @page "/tasks"
+@using System.Security.Claims
 @using GorevTakipUygulamasi.Models
 @using GorevTakipUygulamasi.Services
+@using GorevTakipUygulamasi.Services.Task
 @using Microsoft.AspNetCore.Identity
-@using System.Security.Claims
 @inject ITaskService TaskService
 @inject AuthenticationStateProvider AuthProvider
 @inject NavigationManager Navigation

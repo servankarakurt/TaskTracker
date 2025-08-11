@@ -3,7 +3,7 @@ using GorevTakipUygulamasi.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 
-namespace GorevTakipUygulamasi.Services
+namespace GorevTakipUygulamasi.Services.Task
 {
     public class TaskService : ITaskService
     {

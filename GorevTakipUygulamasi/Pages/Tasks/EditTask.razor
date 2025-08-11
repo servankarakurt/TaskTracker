@@ -5,11 +5,12 @@
 }
 @page "/gorev-duzenle/{TaskId:int}"
 @page "/edit-task/{TaskId:int}"
+@using System.ComponentModel.DataAnnotations
+@using System.Security.Claims
 @using GorevTakipUygulamasi.Models
 @using GorevTakipUygulamasi.Services
+@using GorevTakipUygulamasi.Services.Task
 @using Microsoft.AspNetCore.Identity
-@using System.Security.Claims
-@using System.ComponentModel.DataAnnotations
 @using TaskStatus = GorevTakipUygulamasi.Models.TaskStatus
 @inject ITaskService TaskService
 @inject AuthenticationStateProvider AuthProvider
