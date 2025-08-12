@@ -1,5 +1,4 @@
-﻿// Models/ReminderModels.cs
-using Azure;
+﻿using Azure;
 using Azure.Data.Tables;
 using System.ComponentModel.DataAnnotations;
 
@@ -21,9 +20,30 @@ namespace GorevTakipUygulamasi.Models
 
         public TimeOnly Time { get; set; }
 
+        // Uyumluluk için ReminderDate property'si eklendi
+        public DateTime ReminderDate
+        {
+            get => Date.ToDateTime(Time);
+            set
+            {
+                Date = DateOnly.FromDateTime(value);
+                Time = TimeOnly.FromDateTime(value);
+            }
+        }
+
+        // Uyumluluk için ReminderTime property'si eklendi  
+        public DateTime ReminderTime => ReminderDate;
+
         public bool EmailReminder { get; set; } = true;
 
         public bool IsCompleted { get; set; } = false;
+
+        // Uyumluluk için IsSent property'si eklendi
+        public bool IsSent
+        {
+            get => EmailSent;
+            set => EmailSent = value;
+        }
 
         public string UserId { get; set; } = "";
 
@@ -64,6 +84,23 @@ namespace GorevTakipUygulamasi.Models
         public bool EmailSent { get; set; } = false;
         public DateTime? EmailSentAt { get; set; }
         public string Status { get; set; } = "Active";
+
+        // Uyumluluk için ek property'ler
+        public DateTime ReminderTime
+        {
+            get => DateTime.Parse($"{Date} {Time}");
+            set
+            {
+                Date = value.ToString("yyyy-MM-dd");
+                Time = value.ToString("HH:mm");
+            }
+        }
+
+        public bool IsSent
+        {
+            get => EmailSent;
+            set => EmailSent = value;
+        }
 
         // Parametresiz constructor
         public ReminderEntity() { }

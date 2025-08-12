@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 
 namespace GorevTakipUygulamasi.Services.User
 {
-    public class UserService
+    public class UserService : IUserService
     {
         private readonly TableClient _tableClient;
         private readonly ILogger<UserService> _logger;

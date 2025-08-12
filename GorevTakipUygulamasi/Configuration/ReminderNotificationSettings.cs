@@ -2,7 +2,7 @@
 {
     public class ReminderNotificationSettings
     {
-        public string SendReminderUrl { get; set; }
-        public string CancelReminderUrl { get; set; }
+        public string SendReminderUrl { get; set; } = string.Empty;
+        public string CancelReminderUrl { get; set; } = string.Empty;
     }
 }

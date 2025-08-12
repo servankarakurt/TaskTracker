@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using GorevTakipUygulamasi.Configuration;
 using System.Text;
 using System.Text.Json;
+
 namespace GorevTakipUygulamasi.Services.LogicApp
 {
     public class LogicAppService : ILogicAppService
@@ -21,9 +22,37 @@ namespace GorevTakipUygulamasi.Services.LogicApp
             _logger = logger;
         }
 
-        public Task<bool> CancelReminderAsync(Guid reminderId)
+        public async Task<bool> CancelReminderAsync(Guid reminderId)
         {
-            throw new NotImplementedException();
+            try
+            {
+                var cancelRequest = new { ReminderId = reminderId.ToString() };
+                var json = JsonSerializer.Serialize(cancelRequest, new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                });
+
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync(_settings.CancelReminderUrl, content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    _logger.LogInformation("Hatırlatıcı iptali Logic App'e gönderildi: {ReminderId}", reminderId);
+                    return true;
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger.LogError("Logic App iptal hatası: {StatusCode} - {Error}", response.StatusCode, errorContent);
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Logic App'e hatırlatıcı iptali gönderilirken hata: {ReminderId}", reminderId);
+                return false;
+            }
         }
 
         public async Task<bool> ScheduleReminderAsync(ReminderItem reminder)
@@ -34,7 +63,7 @@ namespace GorevTakipUygulamasi.Services.LogicApp
                 {
                     ReminderId = reminder.Id.ToString(),
                     UserId = reminder.UserId,
-                    UserEmail = await GetUserEmailAsync(reminder.UserId), // Bu metodu implement etmek gerek
+                    UserEmail = await GetUserEmailAsync(reminder.UserId),
                     Title = reminder.Title,
                     Description = reminder.Description,
                     ScheduledDateTime = reminder.Date.ToDateTime(reminder.Time),
@@ -64,7 +93,7 @@ namespace GorevTakipUygulamasi.Services.LogicApp
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Logic App'e hatırlatıcı iptali gönderilirken hata: {ReminderId}", reminderId);
+                _logger.LogError(ex, "Logic App'e hatırlatıcı gönderilirken hata: {ReminderId}", reminder.Id);
                 return false;
             }
         }
@@ -108,7 +137,7 @@ namespace GorevTakipUygulamasi.Services.LogicApp
                 var json = JsonSerializer.Serialize(testData);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                var response = await _httpClient.PostAsync(_settings.TestConnectionUrl, content);
+                using var response = await _httpClient.PostAsync(_settings.TestConnectionUrl, content);
 
                 return response.IsSuccessStatusCode;
             }
@@ -123,6 +152,7 @@ namespace GorevTakipUygulamasi.Services.LogicApp
         {
             // Bu metod user service'den email alacak
             // Şimdilik dummy değer dönüyoruz
+            await Task.CompletedTask; // Async warning'i gidermek için
             return "user@example.com";
         }
     }
