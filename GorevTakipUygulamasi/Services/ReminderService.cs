@@ -1,395 +1,132 @@
-﻿using Azure.Data.Tables;
-using Microsoft.Extensions.Logging;
-using GorevTakipUygulamasi.Models;
+﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using GorevTakipUygulamasi.Services;
 using GorevTakipUygulamasi.Services.LogicApp;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using GorevTakipUygulamasi.Models;
+using System.Security.Claims;
 
-namespace GorevTakipUygulamasi.Services
+namespace GorevTakipUygulamasi.Controllers
 {
-    public class ReminderService : IReminderService
+    [Authorize]
+    [ApiController]
+    [Route("api/[controller]")]
+    public class TestReminderController : ControllerBase
     {
-        private readonly TableClient _tableClient;
-        private readonly ILogger<ReminderService> _logger;
+        private readonly IReminderService _reminderService;
         private readonly ILogicAppService _logicAppService;
-        private const string TableName = "Reminders";
+        private readonly ILogger<TestReminderController> _logger;
 
-        public ReminderService(
-            TableServiceClient tableServiceClient,
-            ILogger<ReminderService> logger,
-            ILogicAppService logicAppService)
+        public TestReminderController(
+            IReminderService reminderService,
+            ILogicAppService logicAppService,
+            ILogger<TestReminderController> logger)
         {
-            _tableClient = tableServiceClient.GetTableClient(TableName);
-            _logger = logger;
+            _reminderService = reminderService;
             _logicAppService = logicAppService;
-
-            // Tabloyu oluştur (yoksa)
-            _tableClient.CreateIfNotExists();
+            _logger = logger;
         }
 
-        public async Task<ServiceResponse<ReminderItem>> CreateReminderAsync(CreateReminderDto dto, string userId)
+        [HttpPost("test-connection")]
+        public async Task<IActionResult> TestConnection()
         {
             try
             {
-                var reminder = new ReminderItem
+                var result = await _logicAppService.TestConnectionAsync();
+                return Ok(new { success = result, message = result ? "Bağlantı başarılı" : "Bağlantı başarısız" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Test connection error");
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("create-test-reminder")]
+        public async Task<IActionResult> CreateTestReminder()
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
                 {
-                    Id = Guid.NewGuid(),
-                    Title = dto.Title,
-                    Description = dto.Description,
-                    Date = dto.Date,
-                    Time = dto.Time,
-                    EmailReminder = dto.EmailReminder,
-                    UserId = userId,
-                    CreatedAt = DateTime.UtcNow,
-                    Status = ReminderStatus.Active
+                    return Unauthorized();
+                }
+
+                var testReminder = new CreateReminderDto
+                {
+                    Title = "Test Hatırlatıcısı",
+                    Description = "Bu bir test hatırlatıcısıdır",
+                    Date = DateOnly.FromDateTime(DateTime.Today),
+                    Time = TimeOnly.FromDateTime(DateTime.Now.AddMinutes(2)), // 2 dakika sonra
+                    EmailReminder = true
                 };
 
-                var entity = new ReminderEntity(reminder, userId);
+                var result = await _reminderService.CreateReminderAsync(testReminder, userId);
 
-                var response = await _tableClient.AddEntityAsync(entity);
-
-                _logger.LogInformation("Hatırlatıcı oluşturuldu: {ReminderId} - {Title}", reminder.Id, reminder.Title);
-
-                // Logic App'e notification schedule et
-                if (reminder.EmailReminder)
+                if (result.IsSuccess)
                 {
-                    await _logicAppService.ScheduleReminderAsync(reminder);
-                }
-
-                return ServiceResponse<ReminderItem>.Success(reminder, "Hatırlatıcı başarıyla oluşturuldu");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hatırlatıcı oluşturulurken hata: {Error}", ex.Message);
-                return ServiceResponse<ReminderItem>.Error("Hatırlatıcı oluşturulamadı");
-            }
-        }
-
-        public async Task<ServiceResponse<ReminderItem>> GetReminderAsync(Guid id, string userId)
-        {
-            try
-            {
-                var response = await _tableClient.GetEntityAsync<ReminderEntity>(userId, id.ToString());
-
-                if (response?.Value != null)
-                {
-                    var reminder = response.Value.ToReminderItem();
-                    return ServiceResponse<ReminderItem>.Success(reminder);
-                }
-
-                return ServiceResponse<ReminderItem>.Error("Hatırlatıcı bulunamadı");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hatırlatıcı getirilirken hata: {ReminderId}", id);
-                return ServiceResponse<ReminderItem>.Error("Hatırlatıcı getirilemedi");
-            }
-        }
-
-        public async Task<ServiceResponse<List<ReminderItem>>> GetUserRemindersAsync(string userId, DateTime? startDate = null, DateTime? endDate = null)
-        {
-            try
-            {
-                var query = _tableClient.QueryAsync<ReminderEntity>(
-                    filter: $"PartitionKey eq '{userId}' and Status ne 'Cancelled'",
-                    maxPerPage: 1000
-                );
-
-                var reminders = new List<ReminderItem>();
-
-                await foreach (var entity in query)
-                {
-                    var reminder = entity.ToReminderItem();
-
-                    // Tarih filtrelemesi
-                    if (startDate.HasValue && reminder.Date < DateOnly.FromDateTime(startDate.Value.Date))
-                        continue;
-
-                    if (endDate.HasValue && reminder.Date > DateOnly.FromDateTime(endDate.Value.Date))
-                        continue;
-
-                    reminders.Add(reminder);
-                }
-
-                // Tarihe göre sırala
-                reminders = reminders.OrderBy(r => r.Date).ThenBy(r => r.Time).ToList();
-
-                return ServiceResponse<List<ReminderItem>>.Success(reminders);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Kullanıcı hatırlatıcıları getirilirken hata: {UserId}", userId);
-                return ServiceResponse<List<ReminderItem>>.Error("Hatırlatıcılar getirilemedi");
-            }
-        }
-
-        public async Task<ServiceResponse<List<ReminderItem>>> GetRemindersByDateAsync(string userId, DateOnly date)
-        {
-            try
-            {
-                var dateString = date.ToString("yyyy-MM-dd");
-                var query = _tableClient.QueryAsync<ReminderEntity>(
-                    filter: $"PartitionKey eq '{userId}' and Date eq '{dateString}' and Status ne 'Cancelled'",
-                    maxPerPage: 100
-                );
-
-                var reminders = new List<ReminderItem>();
-
-                await foreach (var entity in query)
-                {
-                    reminders.Add(entity.ToReminderItem());
-                }
-
-                // Saate göre sırala
-                reminders = reminders.OrderBy(r => r.Time).ToList();
-
-                return ServiceResponse<List<ReminderItem>>.Success(reminders);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Tarih hatırlatıcıları getirilirken hata: {UserId} - {Date}", userId, date);
-                return ServiceResponse<List<ReminderItem>>.Error("Hatırlatıcılar getirilemedi");
-            }
-        }
-
-        public async Task<ServiceResponse<ReminderItem>> UpdateReminderAsync(Guid id, UpdateReminderDto dto, string userId)
-        {
-            try
-            {
-                // Önce mevcut hatırlatıcıyı al
-                var existingResponse = await GetReminderAsync(id, userId);
-                if (!existingResponse.IsSuccess || existingResponse.Data == null)
-                {
-                    return ServiceResponse<ReminderItem>.Error("Hatırlatıcı bulunamadı");
-                }
-
-                var reminder = existingResponse.Data;
-
-                // Güncelle
-                reminder.Title = dto.Title;
-                reminder.Description = dto.Description;
-                reminder.Date = dto.Date;
-                reminder.Time = dto.Time;
-                reminder.EmailReminder = dto.EmailReminder;
-                reminder.IsCompleted = dto.IsCompleted;
-                reminder.UpdatedAt = DateTime.UtcNow;
-
-                if (dto.IsCompleted && !reminder.IsCompleted)
-                {
-                    reminder.CompletedAt = DateTime.UtcNow;
-                    reminder.Status = ReminderStatus.Completed;
-                }
-
-                var entity = new ReminderEntity(reminder, userId);
-
-                await _tableClient.UpdateEntityAsync(entity, Azure.ETag.All);
-
-                _logger.LogInformation("Hatırlatıcı güncellendi: {ReminderId}", id);
-
-                return ServiceResponse<ReminderItem>.Success(reminder, "Hatırlatıcı başarıyla güncellendi");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hatırlatıcı güncellenirken hata: {ReminderId}", id);
-                return ServiceResponse<ReminderItem>.Error("Hatırlatıcı güncellenemedi");
-            }
-        }
-
-        public async Task<ServiceResponse<bool>> DeleteReminderAsync(Guid id, string userId)
-        {
-            try
-            {
-                await _tableClient.DeleteEntityAsync(userId, id.ToString());
-
-                _logger.LogInformation("Hatırlatıcı silindi: {ReminderId}", id);
-
-                return ServiceResponse<bool>.Success(true, "Hatırlatıcı başarıyla silindi");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hatırlatıcı silinirken hata: {ReminderId}", id);
-                return ServiceResponse<bool>.Error("Hatırlatıcı silinemedi");
-            }
-        }
-
-        public async Task<ServiceResponse<bool>> ToggleReminderAsync(Guid id, string userId)
-        {
-            try
-            {
-                // Mevcut hatırlatıcıyı al
-                var existingResponse = await GetReminderAsync(id, userId);
-                if (!existingResponse.IsSuccess || existingResponse.Data == null)
-                {
-                    return ServiceResponse<bool>.Error("Hatırlatıcı bulunamadı");
-                }
-
-                var reminder = existingResponse.Data;
-                reminder.IsCompleted = !reminder.IsCompleted;
-                reminder.UpdatedAt = DateTime.UtcNow;
-
-                if (reminder.IsCompleted)
-                {
-                    reminder.CompletedAt = DateTime.UtcNow;
-                    reminder.Status = ReminderStatus.Completed;
+                    return Ok(new
+                    {
+                        success = true,
+                        message = "Test hatırlatıcısı oluşturuldu",
+                        reminderId = result.Data?.Id,
+                        scheduledTime = result.Data?.ReminderDate
+                    });
                 }
                 else
                 {
-                    reminder.CompletedAt = null;
-                    reminder.Status = ReminderStatus.Active;
+                    return BadRequest(new { success = false, message = result.Message });
                 }
-
-                var entity = new ReminderEntity(reminder, userId);
-                await _tableClient.UpdateEntityAsync(entity, Azure.ETag.All);
-
-                _logger.LogInformation("Hatırlatıcı durumu değiştirildi: {ReminderId} - {IsCompleted}", id, reminder.IsCompleted);
-
-                return ServiceResponse<bool>.Success(true, reminder.IsCompleted ? "Hatırlatıcı tamamlandı" : "Hatırlatıcı aktif edildi");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Hatırlatıcı durumu değiştirilirken hata: {ReminderId}", id);
-                return ServiceResponse<bool>.Error("İşlem gerçekleştirilemedi");
+                _logger.LogError(ex, "Create test reminder error");
+                return BadRequest(new { success = false, message = ex.Message });
             }
         }
 
-        public async Task<ServiceResponse<PagedResult<ReminderItem>>> GetRemindersPagedAsync(ReminderFilter filter)
+        [HttpPost("send-immediate-email")]
+        public async Task<IActionResult> SendImmediateEmail([FromBody] ImmediateEmailRequest request)
         {
             try
             {
-                var queryFilter = $"PartitionKey eq '{filter.UserId}' and Status ne 'Cancelled'";
-
-                // Ek filtreler
-                if (filter.IsCompleted.HasValue)
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
                 {
-                    queryFilter += $" and IsCompleted eq {filter.IsCompleted.Value.ToString().ToLower()}";
+                    return Unauthorized();
                 }
 
-                if (filter.EmailReminder.HasValue)
+                var notification = new ReminderNotificationDto
                 {
-                    queryFilter += $" and EmailReminder eq {filter.EmailReminder.Value.ToString().ToLower()}";
-                }
-
-                var query = _tableClient.QueryAsync<ReminderEntity>(
-                    filter: queryFilter,
-                    maxPerPage: filter.PageSize
-                );
-
-                var allReminders = new List<ReminderItem>();
-
-                await foreach (var entity in query)
-                {
-                    var reminder = entity.ToReminderItem();
-
-                    // Tarih filtreleme
-                    if (filter.StartDate.HasValue && reminder.Date < DateOnly.FromDateTime(filter.StartDate.Value.Date))
-                        continue;
-
-                    if (filter.EndDate.HasValue && reminder.Date > DateOnly.FromDateTime(filter.EndDate.Value.Date))
-                        continue;
-
-                    // Arama terimi filtreleme
-                    if (!string.IsNullOrEmpty(filter.SearchTerm))
-                    {
-                        var searchTerm = filter.SearchTerm.ToLower();
-                        if (!reminder.Title.ToLower().Contains(searchTerm) &&
-                            !(reminder.Description?.ToLower().Contains(searchTerm) ?? false))
-                            continue;
-                    }
-
-                    allReminders.Add(reminder);
-                }
-
-                // Sayfalama
-                var totalCount = allReminders.Count;
-                var pagedReminders = allReminders
-                    .Skip((filter.PageNumber - 1) * filter.PageSize)
-                    .Take(filter.PageSize)
-                    .ToList();
-
-                var result = new PagedResult<ReminderItem>
-                {
-                    Items = pagedReminders,
-                    TotalCount = totalCount,
-                    PageNumber = filter.PageNumber,
-                    PageSize = filter.PageSize
+                    ReminderId = Guid.NewGuid().ToString(),
+                    UserId = userId,
+                    UserEmail = request.Email,
+                    Title = request.Title ?? "Test Email",
+                    Description = request.Description ?? "Bu bir test emailidir",
+                    ScheduledDateTime = DateTime.Now,
+                    NotificationType = "Email"
                 };
 
-                return ServiceResponse<PagedResult<ReminderItem>>.Success(result);
+                var result = await _logicAppService.SendImmediateEmailAsync(notification);
+
+                return Ok(new
+                {
+                    success = result,
+                    message = result ? "Email gönderildi" : "Email gönderilemedi"
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Sayfalanmış hatırlatıcılar getirilirken hata");
-                return ServiceResponse<PagedResult<ReminderItem>>.Error("Hatırlatıcılar getirilemedi");
+                _logger.LogError(ex, "Send immediate email error");
+                return BadRequest(new { success = false, message = ex.Message });
             }
         }
 
-        public async Task<ServiceResponse<List<ReminderItem>>> GetPendingEmailRemindersAsync()
+        public class ImmediateEmailRequest
         {
-            try
-            {
-                var now = DateTime.UtcNow;
-                var currentTime = now.ToString("HH:mm");
-                var currentDate = DateOnly.FromDateTime(now).ToString("yyyy-MM-dd");
-
-                // Bugün ve henüz email gönderilmemiş hatırlatıcılar
-                var query = _tableClient.QueryAsync<ReminderEntity>(
-                    filter: $"Date eq '{currentDate}' and EmailReminder eq true and EmailSent eq false and Status eq 'Active'",
-                    maxPerPage: 1000
-                );
-
-                var pendingReminders = new List<ReminderItem>();
-
-                await foreach (var entity in query)
-                {
-                    var reminder = entity.ToReminderItem();
-
-                    // Zamanı kontrol et (şu anki saat >= hatırlatıcı saati)
-                    var reminderDateTime = reminder.Date.ToDateTime(reminder.Time);
-                    if (now >= reminderDateTime)
-                    {
-                        pendingReminders.Add(reminder);
-                    }
-                }
-
-                return ServiceResponse<List<ReminderItem>>.Success(pendingReminders);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Bekleyen email hatırlatıcıları getirilirken hata");
-                return ServiceResponse<List<ReminderItem>>.Error("Email hatırlatıcıları getirilemedi");
-            }
-        }
-
-        public async Task<ServiceResponse<bool>> MarkEmailAsSentAsync(Guid id)
-        {
-            try
-            {
-                // Hatırlatıcıyı bul
-                var query = _tableClient.QueryAsync<ReminderEntity>(
-                    filter: $"RowKey eq '{id}'",
-                    maxPerPage: 1
-                );
-
-                await foreach (var entity in query)
-                {
-                    entity.EmailSent = true;
-                    entity.EmailSentAt = DateTime.UtcNow;
-
-                    await _tableClient.UpdateEntityAsync(entity, Azure.ETag.All);
-
-                    _logger.LogInformation("Email gönderildi olarak işaretlendi: {ReminderId}", id);
-                    return ServiceResponse<bool>.Success(true);
-                }
-
-                return ServiceResponse<bool>.Error("Hatırlatıcı bulunamadı");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Email durumu güncellenirken hata: {ReminderId}", id);
-                return ServiceResponse<bool>.Error("Email durumu güncellenemedi");
-            }
+            public string Email { get; set; } = "";
+            public string? Title { get; set; }
+            public string? Description { get; set; }
         }
     }
 }
