@@ -1,11 +1,10 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
-using GorevTakipUygulamasi.Services;
 using GorevTakipUygulamasi.Services.LogicApp;
 using GorevTakipUygulamasi.Models;
 using System.Security.Claims;
 
-namespace GorevTakipUygulamasi.Controllers
+namespace GorevTakipUygulamasi.Services.Hatirlatici
 {
     [Authorize]
     [ApiController]

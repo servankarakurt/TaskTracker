@@ -20,7 +20,6 @@ namespace GorevTakipUygulamasi.Services
         {
             _logger.LogInformation("Günlük özet e-postaları gönderimi başlıyor.");
 
-            // Identity User'ları almak için doğru tablo adını kullanıyoruz
             var users = await _context.Users.ToListAsync();
 
             foreach (var user in users)
@@ -46,7 +45,6 @@ namespace GorevTakipUygulamasi.Services
             _logger.LogInformation("Günlük özet e-postaları gönderimi tamamlandı.");
         }
 
-        // Görev tamamlama bildirimi için yeni method
         public async SystemTask SendTaskCompletionNotificationAsync(string taskTitle, string taskDescription, string userEmail)
         {
             try
@@ -74,42 +72,11 @@ namespace GorevTakipUygulamasi.Services
                 _logger.LogError(ex, "Görev tamamlama bildirimi gönderilirken hata: {TaskTitle}", taskTitle);
             }
         }
-
-        // Hatırlatıcı bildirimi için yeni method
-        public async SystemTask SendReminderNotificationAsync(string reminderTitle, string reminderDescription, string userEmail, DateTime scheduledTime)
-        {
-            try
-            {
-                _logger.LogInformation("Hatırlatıcı bildirimi gönderiliyor: {ReminderTitle} -> {Email}", reminderTitle, userEmail);
-
-                var subject = $"🔔 Hatırlatıcı: {reminderTitle}";
-                var message = $"Merhaba!\n\n";
-                message += $"'{reminderTitle}' hatırlatıcınızın zamanı geldi.\n\n";
-
-                if (!string.IsNullOrWhiteSpace(reminderDescription))
-                {
-                    message += $"Detay: {reminderDescription}\n\n";
-                }
-
-                message += $"Planlanan Zaman: {scheduledTime:dd.MM.yyyy HH:mm}\n";
-                message += "\nBu otomatik bir hatırlatıcıdır.";
-
-                // Burada gerçek email servisi entegre edilecek
-                // await _emailSender.SendEmailAsync(userEmail, subject, message);
-
-                _logger.LogInformation("Hatırlatıcı bildirimi gönderildi: {Email}", userEmail);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Hatırlatıcı bildirimi gönderilirken hata: {ReminderTitle}", reminderTitle);
-            }
-        }
     }
 
     public interface INotificationService
     {
         SystemTask SendDailySummaryEmailsAsync();
         SystemTask SendTaskCompletionNotificationAsync(string taskTitle, string taskDescription, string userEmail);
-        SystemTask SendReminderNotificationAsync(string reminderTitle, string reminderDescription, string userEmail, DateTime scheduledTime);
     }
 }

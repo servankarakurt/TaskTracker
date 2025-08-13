@@ -1,6 +1,6 @@
 ﻿using GorevTakipUygulamasi.Models;
 
-namespace GorevTakipUygulamasi.Services
+namespace GorevTakipUygulamasi.Services.Hatirlatici
 {
     public interface IReminderService
     {

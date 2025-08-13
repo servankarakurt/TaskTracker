@@ -5,7 +5,7 @@ using System.Text;
 using System.Text.Json;
 
 
-namespace GorevTakipUygulamasi.Services
+namespace GorevTakipUygulamasi.Services.Notifications
 {
     public class ReminderNotificationService
     {

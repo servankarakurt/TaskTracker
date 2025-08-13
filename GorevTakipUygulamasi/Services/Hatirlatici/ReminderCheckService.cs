@@ -1,7 +1,7 @@
 ﻿using GorevTakipUygulamasi.Data;
+using GorevTakipUygulamasi.Services.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-// DEĞİŞİKLİK: 'System.Threading.Tasks.Task' için 'SystemTask' takma adı eklendi.
 using SystemTask = System.Threading.Tasks.Task;
 
 namespace GorevTakipUygulamasi.Services
@@ -15,11 +15,11 @@ namespace GorevTakipUygulamasi.Services
         public ReminderCheckService(ApplicationDbContext context, ILogger<ReminderCheckService> logger, ReminderNotificationService notificationService)
         {
             _context = context;
-            _logger = logger;
-            _notificationService = notificationService;
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
         }
 
-        public async SystemTask CheckAndProcessRemindersAsync() // DEĞİŞİKLİK: 'Task' -> 'SystemTask'
+        public async SystemTask CheckAndProcessRemindersAsync()
         {
             _logger.LogInformation("Hatırlatıcı kontrolü başladı.");
             var remindersToProcess = await _context.Reminders
@@ -28,13 +28,7 @@ namespace GorevTakipUygulamasi.Services
 
             foreach (var reminder in remindersToProcess)
             {
-                // Bu kısmı ReminderNotificationService'inize göre düzenlemeniz gerekebilir.
-                // Örneğin, Reminder yerine ReminderItem göndermek gibi.
-                // bool success = await _notificationService.SendReminderAsync(reminder); 
-
-                // Şimdilik sadece logluyoruz.
                 _logger.LogInformation("{ReminderId} ID'li hatırlatıcı işleniyor.", reminder.Id);
-
                 reminder.IsSent = true;
                 _context.Update(reminder);
             }
@@ -43,9 +37,8 @@ namespace GorevTakipUygulamasi.Services
             _logger.LogInformation("{Count} adet hatırlatıcı işlendi.", remindersToProcess.Count);
         }
 
-        public async SystemTask CleanupExpiredRemindersAsync() // DEĞİŞİKLİK: 'Task' -> 'SystemTask'
+        public async SystemTask CleanupExpiredRemindersAsync()
         {
-            // Bu metodun içeriğini ihtiyacınıza göre doldurabilirsiniz.
             _logger.LogInformation("Süresi dolmuş hatırlatıcı temizliği yapılacak.");
             await SystemTask.CompletedTask;
         }
@@ -53,7 +46,7 @@ namespace GorevTakipUygulamasi.Services
 
     public interface IReminderCheckService
     {
-        SystemTask CheckAndProcessRemindersAsync(); // DEĞİŞİKLİK: 'Task' -> 'SystemTask'
+        SystemTask CheckAndProcessRemindersAsync();
         SystemTask CleanupExpiredRemindersAsync();
     }
 }
